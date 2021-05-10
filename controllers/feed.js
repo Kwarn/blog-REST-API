@@ -1,41 +1,63 @@
 const { validationResult } = require('express-validator');
+const Post = require('../models/post');
+
+const errorHandler = (error, statusCode, next = null) => {
+  if (!error.statusCode) {
+    error.statusCode = statusCode;
+  }
+  if (next) {
+    next(err);
+  } else {
+    return error;
+  }
+};
 
 exports.getPosts = (req, res, next) => {
-  res.status(200).json({
-    posts: [
-      {
-        _id: '12345',
-        title: 'first post 1111',
-        content: 'This is the post',
-        imageUrl: 'image/duck.jpg',
-        creator: {
-          name: 'karl',
-        },
-        createdAt: new Date(),
-      },
-    ],
-  });
+  Post.find()
+    .then(posts => {
+      res.status(200).json({
+        posts: posts,
+      });
+    })
+    .catch(err => errorHandler(err, 500, next));
 };
 
 exports.postPost = (req, res, next) => {
   const errors = validationResult(req);
   if (errors.errors.length) {
-    return res.status(422).json({
-      message: 'Validation failed, entered data is incorrect',
-      errors: errors.array(),
-    });
+    const error = new Error('Validation failed, entered data is incorrect');
+    error.statusCode = 422;
+    throw error;
   }
   const title = req.body.title;
   const content = req.body.content;
-  // create in db in future
-  res.status(200).json({
-    message: 'Post created.',
-    post: {
-      _id: new Date().toISOString(),
-      title: title,
-      content: content,
-      creator: { name: 'Karl' },
-      createdAt: new Date(),
-    },
+  const post = new Post({
+    title: title,
+    imageUrl: 'images/duck.jpeg',
+    content: content,
+    creator: { name: 'Karl' },
   });
+  post
+    .save()
+    .then(result => {
+      res.status(200).json({
+        message: 'Post created.',
+        post: result,
+      });
+    })
+    .catch(err => {
+      errorHandler(err, 500, next);
+    });
+};
+
+exports.getPost = (req, res, next) => {
+  const postId = req.params.postId;
+  Post.findById(postId)
+    .then(post => {
+      if (!post) {
+        throw errorHandler(new Error('Could not find post.'), 404);
+      }
+      res.status(200).json({ message: 'post fetched', post: post });
+    })
+    .catch(err => errorHandler(err, next));
 };
