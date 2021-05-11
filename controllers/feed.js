@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const User = require('../models/user');
 const errorHandler = require('../util/errorHandler');
+const user = require('../models/user');
 
 const clearImage = filePath => {
   filePath = path.join(__dirname, '..', filePath);
@@ -60,7 +61,6 @@ exports.postPost = (req, res, next) => {
     })
     .then(user => {
       creator = user;
-      console.log('creator', creator);
       user.posts.push(post);
       return user.save();
     })
@@ -111,6 +111,11 @@ exports.updatePost = (req, res, next) => {
       if (!post) {
         throw errorHandler(new Error('No post with that Id found', 404));
       }
+      if (post.creator.toString() !== req.userId) {
+        throw errorHandler(
+          new Error('You do not have permission to modify this post', 403)
+        );
+      }
       if (imageUrl !== post.imageUrl) {
         clearImage(post.imageUrl);
       }
@@ -135,11 +140,56 @@ exports.deletePost = (req, res, next) => {
       if (!post) {
         throw errorHandler(new Error('No post with that Id exists', 404));
       }
+      if (post.creator.toString() !== req.userId) {
+        throw errorHandler(
+          new Error('You do not have permission to modify this post', 403)
+        );
+      }
       clearImage(post.imageUrl);
       return Post.findOneAndRemove(postId);
+    })
+    .then(result => {
+      return User.findById(req.userId);
+    })
+    .then(user => {
+      user.posts.pull(postId);
+      return user.save();
     })
     .then(result => {
       res.status(200).json({ message: 'Deleted post.' });
     })
     .catch(err => errorHandler(err, 500, next));
+};
+
+exports.getStatus = (req, res, next) => {
+  console.log(`req.userId`, req.userId);
+  User.findById(req.userId)
+    .then(user => {
+      console.log(user);
+      if (!user) {
+        throw errorHandler(new Error('No user found'), 403);
+      }
+      res.status(200).json({ status: user.status });
+    })
+    .catch(err => {
+      errorHandler(err, 403, next);
+    });
+};
+
+exports.putStatus = (req, res, next) => {
+  const newStatus = req.body.status;
+  User.findById(req.userId)
+    .then(user => {
+      if (!user) {
+        throw errorHandler(new Error('No user found'), 403);
+      }
+      user.status = newStatus
+      return user.save();
+    })
+    .then(result => {
+      res
+        .status(200)
+        .json({ message: 'Status update success', status: req.body.status });
+    })
+    .catch(err => errorHandler(err, 403, next));
 };
