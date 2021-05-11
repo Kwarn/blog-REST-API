@@ -2,17 +2,8 @@ const { validationResult } = require('express-validator');
 const Post = require('../models/post');
 const fs = require('fs');
 const path = require('path');
-
-const errorHandler = (error, statusCode, next = null) => {
-  if (!error.statusCode) {
-    error.statusCode = statusCode;
-  }
-  if (next) {
-    next(error);
-  } else {
-    return error;
-  }
-};
+const User = require('../models/user');
+const errorHandler = require('../util/errorHandler');
 
 const clearImage = filePath => {
   filePath = path.join(__dirname, '..', filePath);
@@ -55,18 +46,29 @@ exports.postPost = (req, res, next) => {
   const title = req.body.title;
   const imageUrl = req.file.path;
   const content = req.body.content;
+  let creator;
   const post = new Post({
     title: title,
     imageUrl: imageUrl,
     content: content,
-    creator: { name: 'Karl' },
+    creator: req.userId,
   });
   post
     .save()
     .then(result => {
+      return User.findById(req.userId);
+    })
+    .then(user => {
+      creator = user;
+      console.log('creator', creator);
+      user.posts.push(post);
+      return user.save();
+    })
+    .then(result => {
       res.status(200).json({
         message: 'Post created.',
-        post: result,
+        post: post,
+        creator: { _id: creator._id, name: creator.name },
       });
     })
     .catch(err => {

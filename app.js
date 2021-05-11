@@ -1,5 +1,7 @@
 const express = require('express');
 const feedRoutes = require('./routes/feed');
+const authRoutes = require('./routes/auth');
+
 const mongoose = require('mongoose');
 const path = require('path');
 const multer = require('multer');
@@ -49,12 +51,14 @@ app.use((req, res, next) => {
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
 app.use('/feed', feedRoutes);
+app.use('/auth', authRoutes);
 
 app.use((error, req, res, next) => {
   console.log(error);
   const statusCode = error.statusCode || 500;
   const message = error.message;
-  res.status(statusCode).json({ message: message });
+  const data = error.data;
+  res.status(statusCode).json({ message: message, data: data });
 });
 
 mongoose
