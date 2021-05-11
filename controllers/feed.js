@@ -8,7 +8,7 @@ const errorHandler = (error, statusCode, next = null) => {
     error.statusCode = statusCode;
   }
   if (next) {
-    next(err);
+    next(error);
   } else {
     return error;
   }
@@ -20,10 +20,21 @@ const clearImage = filePath => {
 };
 
 exports.getPosts = (req, res, next) => {
+  const currentPage = req.query.page || 1;
+  const perPage = 2;
+  let totalItems;
   Post.find()
+    .countDocuments()
+    .then(count => {
+      totalItems = count;
+      return Post.find()
+        .skip((currentPage - 1) * perPage)
+        .limit(perPage);
+    })
     .then(posts => {
       res.status(200).json({
         posts: posts,
+        totalItems: totalItems,
       });
     })
     .catch(err => errorHandler(err, 500, next));
