@@ -11,28 +11,25 @@ const clearImage = filePath => {
   fs.unlink(filePath, err => console.log(err));
 };
 
-exports.getPosts = (req, res, next) => {
+exports.getPosts = async (req, res, next) => {
   const currentPage = req.query.page || 1;
   const perPage = 2;
-  let totalItems;
-  Post.find()
-    .countDocuments()
-    .then(count => {
-      totalItems = count;
-      return Post.find()
-        .skip((currentPage - 1) * perPage)
-        .limit(perPage);
-    })
-    .then(posts => {
-      res.status(200).json({
-        posts: posts,
-        totalItems: totalItems,
-      });
-    })
-    .catch(err => errorHandler(err, 500, next));
+  try {
+    const totalItems = await Post.find().countDocuments();
+    const posts = await Post.find()
+      .skip((currentPage - 1) * perPage)
+      .limit(perPage);
+
+    res.status(200).json({
+      posts: posts,
+      totalItems: totalItems,
+    });
+  } catch (error) {
+    errorHandler(error, 500, next);
+  }
 };
 
-exports.postPost = (req, res, next) => {
+exports.postPost = async (req, res, next) => {
   const errors = validationResult(req);
   if (errors.errors.length) {
     throw errorHandler(
@@ -47,48 +44,41 @@ exports.postPost = (req, res, next) => {
   const title = req.body.title;
   const imageUrl = req.file.path;
   const content = req.body.content;
-  let creator;
   const post = new Post({
     title: title,
     imageUrl: imageUrl,
     content: content,
     creator: req.userId,
   });
-  post
-    .save()
-    .then(result => {
-      return User.findById(req.userId);
-    })
-    .then(user => {
-      creator = user;
-      user.posts.push(post);
-      return user.save();
-    })
-    .then(result => {
-      res.status(200).json({
-        message: 'Post created.',
-        post: post,
-        creator: { _id: creator._id, name: creator.name },
-      });
-    })
-    .catch(err => {
-      errorHandler(err, 500, next);
+  try {
+    await post.save();
+    const user = await User.findById(req.userId);
+    await user.posts.push(post);
+    await user.save();
+    res.status(200).json({
+      message: 'Post created.',
+      post: post,
+      creator: { _id: user._id, name: user.name },
     });
+  } catch (error) {
+    errorHandler(error, 500, next);
+  }
 };
 
-exports.getPost = (req, res, next) => {
+exports.getPost = async (req, res, next) => {
   const postId = req.params.postId;
-  Post.findById(postId)
-    .then(post => {
-      if (!post) {
-        throw errorHandler(new Error('Could not find post.'), 404);
-      }
-      res.status(200).json({ message: 'post fetched', post: post });
-    })
-    .catch(err => errorHandler(err, next));
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      throw errorHandler(new Error('Could not find post.'), 404);
+    }
+    res.status(200).json({ message: 'post fetched', post: post });
+  } catch (error) {
+    errorHandler(error, 500, next);
+  }
 };
 
-exports.updatePost = (req, res, next) => {
+exports.updatePost = async (req, res, next) => {
   const errors = validationResult(req);
   if (errors.errors.length) {
     throw errorHandler(
@@ -106,90 +96,86 @@ exports.updatePost = (req, res, next) => {
   if (!imageUrl) {
     throw errorHandler(new Error('No image file picked'), 422);
   }
-  Post.findById(postId)
-    .then(post => {
-      if (!post) {
-        throw errorHandler(new Error('No post with that Id found', 404));
-      }
-      if (post.creator.toString() !== req.userId) {
-        throw errorHandler(
-          new Error('You do not have permission to modify this post', 403)
-        );
-      }
-      if (imageUrl !== post.imageUrl) {
-        clearImage(post.imageUrl);
-      }
-      post.title = title;
-      post.imageUrl = imageUrl;
-      post.content = content;
-      return post.save();
-    })
-    .then(result => {
-      res
-        .status(200)
-        .json({ message: 'Post Updated Successfully', post: result });
-    })
-    .catch(err => errorHandler(err, 500, next));
-};
 
-exports.deletePost = (req, res, next) => {
-  const postId = req.params.postId;
-  Post.findById(postId)
-    .then(post => {
-      //check logged in user in future
-      if (!post) {
-        throw errorHandler(new Error('No post with that Id exists', 404));
-      }
-      if (post.creator.toString() !== req.userId) {
-        throw errorHandler(
-          new Error('You do not have permission to modify this post', 403)
-        );
-      }
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      throw errorHandler(new Error('No post with that Id found', 404));
+    }
+    if (post.creator.toString() !== req.userId) {
+      throw errorHandler(
+        new Error('You do not have permission to modify this post', 403)
+      );
+    }
+    if (imageUrl !== post.imageUrl) {
       clearImage(post.imageUrl);
-      return Post.findOneAndRemove(postId);
-    })
-    .then(result => {
-      return User.findById(req.userId);
-    })
-    .then(user => {
-      user.posts.pull(postId);
-      return user.save();
-    })
-    .then(result => {
-      res.status(200).json({ message: 'Deleted post.' });
-    })
-    .catch(err => errorHandler(err, 500, next));
+    }
+    post.title = title;
+    post.imageUrl = imageUrl;
+    post.content = content;
+    const savedPost = await post.save();
+    res
+      .status(200)
+      .json({ message: 'Post Updated Successfully', post: savedPost });
+  } catch (error) {
+    errorHandler(error, 500, next);
+  }
 };
 
-exports.getStatus = (req, res, next) => {
-  console.log(`req.userId`, req.userId);
-  User.findById(req.userId)
-    .then(user => {
-      console.log(user);
-      if (!user) {
-        throw errorHandler(new Error('No user found'), 403);
-      }
-      res.status(200).json({ status: user.status });
-    })
-    .catch(err => {
-      errorHandler(err, 403, next);
-    });
+exports.deletePost = async (req, res, next) => {
+  const postId = req.params.postId;
+
+  try {
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      throw errorHandler(new Error('No post with that Id exists', 404));
+    }
+    if (post.creator.toString() !== req.userId) {
+      throw errorHandler(
+        new Error('You do not have permission to modify this post', 403)
+      );
+    }
+
+    clearImage(post.imageUrl);
+    await Post.findOneAndRemove(postId);
+    const user = await User.findById(req.userId);
+    await user.posts.pull(postId);
+    await user.save();
+
+    res.status(200).json({ message: 'Deleted post.' });
+  } catch (error) {
+    errorHandler(error, 500, next);
+  }
 };
 
-exports.putStatus = (req, res, next) => {
+exports.getStatus = async (req, res, next) => {
+  const user = await User.findById(req.userId);
+
+  try {
+    if (!user) {
+      throw errorHandler(new Error('No user found'), 403);
+    }
+    res.status(200).json({ status: user.status });
+  } catch (error) {
+    errorHandler(error, 403, next);
+  }
+};
+
+exports.putStatus = async (req, res, next) => {
   const newStatus = req.body.status;
-  User.findById(req.userId)
-    .then(user => {
-      if (!user) {
-        throw errorHandler(new Error('No user found'), 403);
-      }
-      user.status = newStatus
-      return user.save();
-    })
-    .then(result => {
-      res
-        .status(200)
-        .json({ message: 'Status update success', status: req.body.status });
-    })
-    .catch(err => errorHandler(err, 403, next));
+  try {
+    const user = await User.findById(req.userId);
+
+    if (!user) {
+      throw errorHandler(new Error('No user found'), 403);
+    }
+    user.status = newStatus;
+    await user.save();
+    res
+      .status(200)
+      .json({ message: 'Status update success', status: req.body.status });
+  } catch (error) {
+    errorHandler(error, 403, next);
+  }
 };
