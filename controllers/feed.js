@@ -1,6 +1,8 @@
 const { validationResult } = require('express-validator');
 const Post = require('../models/post');
 const fs = require('fs');
+
+const io = require('../socket');
 const path = require('path');
 const User = require('../models/user');
 const errorHandler = require('../util/errorHandler');
@@ -17,6 +19,8 @@ exports.getPosts = async (req, res, next) => {
   try {
     const totalItems = await Post.find().countDocuments();
     const posts = await Post.find()
+      .populate('creator')
+      .sort({ createdAt: -1 })
       .skip((currentPage - 1) * perPage)
       .limit(perPage);
 
@@ -55,6 +59,10 @@ exports.postPost = async (req, res, next) => {
     const user = await User.findById(req.userId);
     await user.posts.push(post);
     await user.save();
+    io.getIO().emit('posts', {
+      action: 'create',
+      post: { ...post._doc, creator: { _id: req.userId, name: user.name } },
+    });
     res.status(200).json({
       message: 'Post created.',
       post: post,
@@ -98,11 +106,11 @@ exports.updatePost = async (req, res, next) => {
   }
 
   try {
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId).populate('creator');
     if (!post) {
       throw errorHandler(new Error('No post with that Id found', 404));
     }
-    if (post.creator.toString() !== req.userId) {
+    if (post.creator._id.toString() !== req.userId) {
       throw errorHandler(
         new Error('You do not have permission to modify this post', 403)
       );
@@ -113,10 +121,13 @@ exports.updatePost = async (req, res, next) => {
     post.title = title;
     post.imageUrl = imageUrl;
     post.content = content;
-    const savedPost = await post.save();
-    res
-      .status(200)
-      .json({ message: 'Post Updated Successfully', post: savedPost });
+    await post.save();
+    io.getIO().emit('posts', {
+      action: 'update',
+      post: post,
+    });
+
+    res.status(200).json({ message: 'Post Updated Successfully', post: post });
   } catch (error) {
     errorHandler(error, 500, next);
   }
@@ -139,10 +150,13 @@ exports.deletePost = async (req, res, next) => {
 
     clearImage(post.imageUrl);
     await Post.findOneAndRemove(postId);
-    const user = await User.findById(req.userId);
-    await user.posts.pull(postId);
+    user = await User.findById(req.userId);
+    user.posts.pull(postId);
     await user.save();
-
+    io.getIO().emit('posts', {
+      action: 'delete',
+      postId: postId,
+    });
     res.status(200).json({ message: 'Deleted post.' });
   } catch (error) {
     errorHandler(error, 500, next);
