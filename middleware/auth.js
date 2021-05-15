@@ -4,18 +4,22 @@ const errorHandler = require('../util/errorHandler');
 module.exports = (req, res, next) => {
   const authHeader = req.get('Authorization');
   if (!authHeader) {
-    throw errorHandler(new Error('No Authorization Header Found'), 401);
+    req.isAuth = false;
+    return next();
   }
   const token = authHeader.split(' ')[1];
   let decodedToken;
   try {
-    decodedToken = jwt.verify(token, 'someSuperSecretSecret');
+    decodedToken = jwt.verify(token, 'supersecretsecret');
   } catch (err) {
-    throw errorHandler(err, 500);
+    req.isAuth = false;
+    return next();
   }
   if (!decodedToken) {
-    throw errorHandler(new Error('Not Authenticated.'), 401);
+    req.isAuth = false;
+    return next();
   }
   req.userId = decodedToken.userId;
+  req.isAuth = true;
   next();
 };

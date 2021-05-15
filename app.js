@@ -5,6 +5,7 @@ const path = require('path');
 const multer = require('multer');
 const graphqlSchema = require('./graphql/schema');
 const graphqlResolver = require('./graphql/resolvers');
+const auth = require('./middleware/auth');
 
 const app = express();
 
@@ -54,13 +55,15 @@ app.use((req, res, next) => {
 
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
+app.use(auth);
+
 app.use(
   '/graphql',
   graphqlHTTP({
     schema: graphqlSchema,
     rootValue: graphqlResolver,
     graphiql: true,
-    formatError(error) {
+    customFormatErrorFn(error) {
       if (!error.originalError) {
         return error;
       }
