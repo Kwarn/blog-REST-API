@@ -1,10 +1,10 @@
 const express = require('express');
-const feedRoutes = require('./routes/feed');
-const authRoutes = require('./routes/auth');
-
+const { graphqlHTTP } = require('express-graphql');
 const mongoose = require('mongoose');
 const path = require('path');
 const multer = require('multer');
+const graphqlSchema = require('./graphql/schema');
+const graphqlResolver = require('./graphql/resolvers');
 
 const app = express();
 
@@ -45,13 +45,32 @@ app.use((req, res, next) => {
     'GET, POST, PUT, PATCH, DELETE'
   );
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    // graphql rejects non POST requests, this skips the 'OPTIONS' request.
+    return res.sendStatus(200);
+  }
   next();
 });
 
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
-app.use('/feed', feedRoutes);
-app.use('/auth', authRoutes);
+app.use(
+  '/graphql',
+  graphqlHTTP({
+    schema: graphqlSchema,
+    rootValue: graphqlResolver,
+    graphiql: true,
+    formatError(error) {
+      if (!error.originalError) {
+        return error;
+      }
+      const data = error.originalError.data;
+      const message = error.message || 'An error occurred.';
+      const code = error.originalError.statusCode || 500;
+      return { message: message, data: data, status: code };
+    },
+  })
+);
 
 app.use((error, req, res, next) => {
   console.log(error);
@@ -67,8 +86,6 @@ mongoose
     { useNewUrlParser: true, useUnifiedTopology: true, useFindAndModify: false }
   )
   .then(result => {
-    console.log('Mongoose Connected Successfully');
-    const server = app.listen(8080);
-    const io = require('./socket').init(server);
+    app.listen(8080);
   })
   .catch(err => console.log(`Mongoose Connection Error`, err));
