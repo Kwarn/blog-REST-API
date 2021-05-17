@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const validator = require('validator').default;
 const { validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+const { Mongoose } = require('mongoose');
 
 module.exports = {
   createUser: async function ({ userInput }, req) {
@@ -62,10 +63,6 @@ module.exports = {
     }
     let { title, content, imageUrl } = postInput;
 
-    imageUrl = 'testing image URL';
-
-    console.log(title, content, imageUrl);
-
     const errors = [];
 
     if (validator.isEmpty(title) || !validator.isLength(title, { min: 5 })) {
@@ -105,12 +102,20 @@ module.exports = {
       updatedAt: createdPost.updatedAt.toISOString(),
     };
   },
-  getPosts: async function (args, req) {
+  getPosts: async function ({ page }, req) {
     if (!req.isAuth) {
       throw errorHandler(new Error('Not authenticated.', 401));
     }
+    if (!page) {
+      page = 1;
+    }
+    const perPage = 2;
     const totalPosts = await Post.find().countDocuments();
-    const posts = await Post.find().sort({ createdAt: -1 }).populate('creator');
+    const posts = await Post.find()
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * perPage)
+      .limit(perPage)
+      .populate('creator');
 
     return {
       posts: posts.map(p => {
@@ -122,6 +127,21 @@ module.exports = {
         };
       }),
       totalPosts: totalPosts,
+    };
+  },
+  getPost: async function ({ postId }, req) {
+    // if (!req.isAuth) {
+    //   throw errorHandler(new Error('Not authenticated.', 401));
+    // }
+    const post = await Post.findById(postId).populate('creator');
+    if (!post) {
+      throw errorHandler(new Error('No post found'), 404);
+    }
+    return {
+      ...post._doc,
+      _id: post._id.toString(),
+      createdAt: post.createdAt.toISOString(),
+      updatedAt: post.updatedAt.toISOString(),
     };
   },
 };

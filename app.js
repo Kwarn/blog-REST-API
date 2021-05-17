@@ -2,12 +2,19 @@ const express = require('express');
 const { graphqlHTTP } = require('express-graphql');
 const mongoose = require('mongoose');
 const path = require('path');
+const fs = require('fs');
 const multer = require('multer');
 const graphqlSchema = require('./graphql/schema');
 const graphqlResolver = require('./graphql/resolvers');
 const auth = require('./middleware/auth');
+const errorHandler = require('./util/errorHandler');
 
 const app = express();
+
+const clearImage = filePath => {
+  filePath = path.join(__dirname, '..', filePath);
+  fs.unlink(filePath, err => console.log(err));
+};
 
 const fileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -54,8 +61,21 @@ app.use((req, res, next) => {
 });
 
 app.use('/images', express.static(path.join(__dirname, 'images')));
-
 app.use(auth);
+app.put('/post-image', (req, res, next) => {
+  if (!req.isAuth) {
+    throw errorHandler(new Error('Not authorized', 401));
+  }
+  if (!req.file) {
+    return res.status(200).json({ message: 'No file provided.' });
+  }
+  if (req.body.oldPath) {
+    clearImage(req.body.oldPath);
+  }
+  return res
+    .status(201)
+    .json({ message: 'File uploaded', filePath: req.file.path });
+});
 
 app.use(
   '/graphql',
