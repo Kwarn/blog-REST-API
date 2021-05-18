@@ -5,7 +5,11 @@ const errorHandler = (
   errorDataArray = null
 ) => {
   if (!error.statusCode) {
-    error.statusCode = statusCode;
+    if (statusCode) {
+      error.statusCode = statusCode;
+    } else {
+      error.statusCode = 500;
+    }
   }
   if (errorDataArray) {
     error.data = errorDataArray;

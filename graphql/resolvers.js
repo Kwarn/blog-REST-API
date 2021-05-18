@@ -5,9 +5,24 @@ const bcrypt = require('bcrypt');
 const validator = require('validator').default;
 const jwt = require('jsonwebtoken');
 
+const getPostValidationErrors = (title, content, imageUrl) => {
+  const errors = [];
+  if (validator.isEmpty(title) || !validator.isLength(title, { min: 5 })) {
+    errors.push({ message: 'Invalid title.' });
+  }
+  if (validator.isEmpty(content) || !validator.isLength(content, { min: 5 })) {
+    errors.push({ message: 'Invalid content.' });
+  }
+  // ToDo: Validate imageUrl
+  if (errors.length > 0) {
+    console.log(errors);
+    return errors;
+  }
+  return false;
+};
+
 module.exports = {
-  createUser: async function ({ userInput }, req) {
-    const { email, name, password } = userInput;
+  createUser: async function ({ userInput: { email, name, password } }, req) {
     const errors = [];
     if (!validator.isEmail(email)) {
       errors.push({ message: 'Invalid email address.' });
@@ -55,32 +70,20 @@ module.exports = {
     );
     return { token: token, userId: user._id.toString() };
   },
-  createPost: async function ({ postInput }, req) {
-    if (!req.isAuth) {
-      throw errorHandler(new Error('Not authenticated.', 401));
-    }
-    let { title, content, imageUrl } = postInput;
+  createPost: async function (
+    { postInput: { title, content, imageUrl } },
+    req
+  ) {
+    if (!req.userId) throw errorHandler(new Error('Not authenticated.'), 401);
 
-    const errors = [];
-
-    if (validator.isEmpty(title) || !validator.isLength(title, { min: 5 })) {
-      errors.push({ message: 'Invalid title.' });
-    }
-    if (
-      validator.isEmpty(content) ||
-      !validator.isLength(content, { min: 5 })
-    ) {
-      errors.push({ message: 'Invalid content.' });
-    }
-
-    console.log(postInput.imageUrl);
-    // if (!validator.isURL(imageUrl)) {
-    //   errors.push({ message: 'Invalid image URL.' });
-    // }
-
-    if (errors.length > 0) {
-      throw errorHandler(new Error('Invalid post data.'), 422);
-    }
+    const validationErrors = getPostValidationErrors(title, content, imageUrl);
+    if (validationErrors)
+      throw errorHandler(
+        new Error('Invalid post data.'),
+        422,
+        null,
+        validationErrors
+      );
 
     const user = await User.findById(req.userId);
     if (!user) {
@@ -102,31 +105,25 @@ module.exports = {
       updatedAt: createdPost.updatedAt.toISOString(),
     };
   },
-  updatePost: async function ({ postId, postInput }, req) {
-    if (!req.isAuth) {
-      throw errorHandler(new Error('Not authenticated.', 401));
-    }
-    let { title, content, imageUrl } = postInput;
+  updatePost: async function (
+    { postId, postInput: { title, content, imageUrl } },
+    req
+  ) {
+    if (!req.userId) throw errorHandler(new Error('Not authenticated.'), 401);
 
+    const validationErrors = getPostValidationErrors(title, content, imageUrl);
+    if (validationErrors)
+      throw errorHandler(
+        new Error('Invalid post data.'),
+        422,
+        null,
+        validationErrors
+      );
     const post = await Post.findById(postId).populate('creator');
     if (post.creator._id.toString() !== req.userId.toString()) {
       throw errorHandler(
         new Error('You are not authorized to modify this post.', 403)
       );
-    }
-    const errors = [];
-    if (validator.isEmpty(title) || !validator.isLength(title, { min: 5 })) {
-      errors.push({ message: 'Invalid title.' });
-    }
-    if (
-      validator.isEmpty(content) ||
-      !validator.isLength(content, { min: 5 })
-    ) {
-      errors.push({ message: 'Invalid content.' });
-    }
-    // Todo: check image is correct file type
-    if (errors.length > 0) {
-      throw errorHandler(new Error('Invalid post data.'), 422);
     }
 
     post.title = title;
@@ -142,9 +139,38 @@ module.exports = {
       updatedAt: updatedPost.updatedAt.toISOString(),
     };
   },
+  deletePost: async function ({ postId }, req) {
+    if (!req.userId) throw errorHandler(new Error('Not authenticated.'), 401);
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      throw errorHandler(new Error('No post with that ID found.'), 404);
+    }
+    if (post.creator.toString() !== req.userId.toString()) {
+      throw errorHandler(
+        new Error('You are not authorized to delete this post.'),
+        401
+      );
+    }
+    const user = await User.findById(req.userId);
+    user.posts = user.posts.filter(
+      post => post._id.toString() !== postId.toString()
+    );
+    await user.save();
+    await Post.deleteOne({ _id: postId }, err => {
+      if (err) {
+        throw errorHandler(new Error('Failed to delete post.', 500));
+      }
+      console.log(`Post: ${postId} deleted successfully.`);
+    });
+
+    return {
+      postId: postId,
+    };
+  },
   getPosts: async function ({ page }, req) {
-    if (!req.isAuth) {
-      throw errorHandler(new Error('Not authenticated.', 401));
+    if (!req.userId) {
+      throw errorHandler(new Error('Not Authenticated.'), 401);
     }
     if (!page) {
       page = 1;
@@ -170,8 +196,8 @@ module.exports = {
     };
   },
   getPost: async function ({ postId }, req) {
-    if (!req.isAuth) {
-      throw errorHandler(new Error('Not authenticated.', 401));
+    if (!req.userId) {
+      throw errorHandler(new Error('Not Authenticated.'), 401);
     }
     const post = await Post.findById(postId).populate('creator');
     if (!post) {
@@ -185,8 +211,8 @@ module.exports = {
     };
   },
   getStatus: async function (args, req) {
-    if (!req.isAuth) {
-      throw errorHandler(new Error('Not authenticated.', 401));
+    if (!req.userId) {
+      throw errorHandler(new Error('Not Authenticated.'), 401);
     }
     const user = await User.findById(req.userId);
     if (!user) {
@@ -196,18 +222,18 @@ module.exports = {
       status: user.status,
     };
   },
-  updateStatus: async function ({ statusInput }, req) {
-    if (!req.isAuth) {
-      throw errorHandler(new Error('Not authenticated.', 401));
+  updateStatus: async function ({ statusInput: { status } }, req) {
+    if (!req.userId) {
+      throw errorHandler(new Error('Not Authenticated.'), 401);
     }
     const user = await User.findById(req.userId);
     if (!user) {
       throw errorHandler(new Error('No user with that ID found.'));
     }
-    user.status = statusInput.status;
-    await user.save();
+    user.status = status;
+    const savedUser = await user.save();
     return {
-      status: user.status,
+      status: savedUser.status,
     };
   },
 };

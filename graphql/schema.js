@@ -29,6 +29,9 @@ module.exports = buildSchema(`
   type Status {
     status: String!
   }
+  type DeletedPostId {
+    postId: ID!
+  }
   input StatusInputData {
     status: String!
   }
@@ -52,6 +55,7 @@ module.exports = buildSchema(`
   type RootMutation {
     createUser(userInput: UserInputData): User!
     createPost(postInput: PostInputData): Post!
+    deletePost(postId: ID!): DeletedPostId!
     updateStatus(statusInput: StatusInputData): Status!
     updatePost(postId: ID!, postInput: PostInputData): Post!
   }
