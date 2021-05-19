@@ -64,7 +64,7 @@ app.use('/images', express.static(path.join(__dirname, 'images')));
 app.use(auth);
 app.put('/post-image', (req, res, next) => {
   if (!req.isAuth) {
-    throw errorHandler(new Error('Not authorized', 401));
+    throw errorHandler('Not authorized', 401);
   }
   if (!req.file) {
     return res.status(200).json({ message: 'No file provided.' });
@@ -97,7 +97,7 @@ app.use(
 
 app.use((error, req, res, next) => {
   console.log(error);
-  const statusCode = error.statusCode || 500;
+  const statusCode = error.statusCode || error.status || 500;
   const message = error.message;
   const data = error.data;
   res.status(statusCode).json({ message: message, data: data });

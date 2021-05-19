@@ -1,16 +1,12 @@
 const errorHandler = (
-  error,
+  errorMessage,
   statusCode,
   next = null,
   errorDataArray = null
 ) => {
-  if (!error.statusCode) {
-    if (statusCode) {
-      error.statusCode = statusCode;
-    } else {
-      error.statusCode = 500;
-    }
-  }
+  const error = new Error(errorMessage);
+  error.statusCode = statusCode || 500;
+  error.status = statusCode || 500;
   if (errorDataArray) {
     error.data = errorDataArray;
   }

@@ -35,12 +35,12 @@ module.exports = {
       errors.push({ message: 'Password must be atleast 6 characters.' });
     }
     if (errors.length > 0) {
-      throw errorHandler(new Error('Invalid input.'), 422, null, errors);
+      throw errorHandler('Invalid input.', 422, null, errors);
       console.log(`errors`, errors);
     }
     const existingUser = await User.findOne({ email: email });
     if (existingUser) {
-      throw errorHandler(new Error('That user already exists'), 402);
+      throw errorHandler('That user already exists', 402);
     }
     const hashedPassword = await bcrypt.hash(password, 12);
     const user = new User({
@@ -54,11 +54,11 @@ module.exports = {
   login: async function ({ email, password }) {
     const user = await User.findOne({ email: email });
     if (!user) {
-      throw errorHandler(new Error('No user found.'), 401);
+      throw errorHandler('No user found.', 401);
     }
     const isEqual = await bcrypt.compare(password, user.password);
     if (!isEqual) {
-      throw errorHandler(new Error('Password is incorrect.'), 401);
+      throw errorHandler('Password is incorrect.', 401);
     }
     const token = jwt.sign(
       {
@@ -74,20 +74,15 @@ module.exports = {
     { postInput: { title, content, imageUrl } },
     req
   ) {
-    if (!req.userId) throw errorHandler(new Error('Not authenticated.'), 401);
+    if (!req.userId) throw errorHandler('Not authenticated.', 401);
 
     const validationErrors = getPostValidationErrors(title, content, imageUrl);
     if (validationErrors)
-      throw errorHandler(
-        new Error('Invalid post data.'),
-        422,
-        null,
-        validationErrors
-      );
+      throw errorHandler('Invalid post data.', 422, null, validationErrors);
 
     const user = await User.findById(req.userId);
     if (!user) {
-      throw errorHandler(new Error('No user found.'), 401);
+      throw errorHandler('No user found.', 401);
     }
     const post = new Post({
       title: title,
@@ -109,21 +104,14 @@ module.exports = {
     { postId, postInput: { title, content, imageUrl } },
     req
   ) {
-    if (!req.userId) throw errorHandler(new Error('Not authenticated.'), 401);
+    if (!req.userId) throw errorHandler('Not authenticated.', 401);
 
     const validationErrors = getPostValidationErrors(title, content, imageUrl);
     if (validationErrors)
-      throw errorHandler(
-        new Error('Invalid post data.'),
-        422,
-        null,
-        validationErrors
-      );
+      throw errorHandler('Invalid post data.', 422, null, validationErrors);
     const post = await Post.findById(postId).populate('creator');
     if (post.creator._id.toString() !== req.userId.toString()) {
-      throw errorHandler(
-        new Error('You are not authorized to modify this post.', 403)
-      );
+      throw errorHandler('You are not authorized to modify this post.', 403);
     }
 
     post.title = title;
@@ -140,17 +128,14 @@ module.exports = {
     };
   },
   deletePost: async function ({ postId }, req) {
-    if (!req.userId) throw errorHandler(new Error('Not authenticated.'), 401);
+    if (!req.userId) throw errorHandler('Not authenticated.', 401);
 
     const post = await Post.findById(postId);
     if (!post) {
-      throw errorHandler(new Error('No post with that ID found.'), 404);
+      throw errorHandler('No post with that ID found.', 404);
     }
     if (post.creator.toString() !== req.userId.toString()) {
-      throw errorHandler(
-        new Error('You are not authorized to delete this post.'),
-        401
-      );
+      throw errorHandler('You are not authorized to delete this post.', 403);
     }
     const user = await User.findById(req.userId);
     user.posts = user.posts.filter(
@@ -159,7 +144,7 @@ module.exports = {
     await user.save();
     await Post.deleteOne({ _id: postId }, err => {
       if (err) {
-        throw errorHandler(new Error('Failed to delete post.', 500));
+        throw errorHandler('Failed to delete post.', 404);
       }
       console.log(`Post: ${postId} deleted successfully.`);
     });
@@ -170,7 +155,7 @@ module.exports = {
   },
   getPosts: async function ({ page }, req) {
     if (!req.userId) {
-      throw errorHandler(new Error('Not Authenticated.'), 401);
+      throw errorHandler('Not Authenticated.', 401);
     }
     if (!page) {
       page = 1;
@@ -197,11 +182,11 @@ module.exports = {
   },
   getPost: async function ({ postId }, req) {
     if (!req.userId) {
-      throw errorHandler(new Error('Not Authenticated.'), 401);
+      throw errorHandler('Not Authenticated.', 401);
     }
     const post = await Post.findById(postId).populate('creator');
     if (!post) {
-      throw errorHandler(new Error('No post found'), 404);
+      throw errorHandler('No post found', 404);
     }
     return {
       ...post._doc,
@@ -212,11 +197,11 @@ module.exports = {
   },
   getStatus: async function (args, req) {
     if (!req.userId) {
-      throw errorHandler(new Error('Not Authenticated.'), 401);
+      throw errorHandler('Not Authenticated.', 401);
     }
     const user = await User.findById(req.userId);
     if (!user) {
-      throw errorHandler(new Error('No user with that ID found.'));
+      throw errorHandler('No user with that ID found.', 404);
     }
     return {
       status: user.status,
@@ -224,11 +209,11 @@ module.exports = {
   },
   updateStatus: async function ({ statusInput: { status } }, req) {
     if (!req.userId) {
-      throw errorHandler(new Error('Not Authenticated.'), 401);
+      throw errorHandler('Not Authenticated.', 401);
     }
     const user = await User.findById(req.userId);
     if (!user) {
-      throw errorHandler(new Error('No user with that ID found.'));
+      throw errorHandler('No user with that ID found.');
     }
     user.status = status;
     const savedUser = await user.save();
